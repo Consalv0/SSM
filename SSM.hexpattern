@@ -1,0 +1,226 @@
+#pragma author Consalvo   
+#pragma endian little
+
+import std.string;
+import std.mem;
+import std.sys;
+import std.ctype;
+
+struct Vector4f
+{
+    float x, y, z, w;
+} [[static]];
+
+struct Vector3f
+{
+    float x [[color("FF5050")]];
+    float y [[color("50FF50")]];
+    float z [[color("5050FF")]];
+} [[static]];
+
+struct Vector2f
+{
+    float u [[color("FFFF20")]];
+    float v [[color("20FFFF")]];
+} [[static]];
+
+struct Matrix3x4f
+{
+    float m00 [[color("500000")]];
+    float m01 [[color("A00000")]];
+    float m02 [[color("FF0000")]];
+    float m10 [[color("005000")]];
+    float m11 [[color("00A000")]];
+    float m12 [[color("00FF00")]];
+    float m20 [[color("000050")]];
+    float m21 [[color("0000A0")]];
+    float m22 [[color("0000FF")]];
+    float m30 [[color("FF2020")]];
+    float m31 [[color("20FF20")]];
+    float m32 [[color("2020FF")]];
+} [[static]];
+
+struct SSM_Light 
+{
+    u8 type [[color("808080")]];
+    char name[] [[color("#80AC60")]];
+    char parentName[] [[color("#80AC60")]];
+    Vector3f position;
+    Vector3f vector1;
+    Vector3f vector2;
+    u32 number [[color("A020F0")]];
+};
+
+struct SSM_PointArray
+{
+    u32 pointCount [[color("FFFFFF")]];
+    lastPointSize = pointCount;
+    Vector3f vertices[pointCount];
+};
+
+struct SSM_VertexData
+{
+    u32 pointIndex;
+    Vector2f textCoord;
+    Vector3f normal;
+} [[static]];
+
+struct SSM_Face
+{
+    u24 face0;
+    u8 flag0;
+    u24 face1;
+    u8 flag1;
+    u24 face2;
+    u8 flag2;
+    Vector3f normal;
+} [[static]];
+
+struct SSM_Submesh
+{
+    u8 hasMaterial = std::mem::read_unsigned($, 1);
+    if ( hasMaterial == 0 )
+    {
+        u8 check;
+    }
+    else
+    {
+        if ( hasMaterial == 1 )
+        {
+            u8 check;
+            char materialName[] [[color("#80AC60")]];
+        }
+        else
+        {
+            char textureFile[] [[color("#80AC60")]];
+            char materialName[] [[color("#80AC60")]];
+        }
+        
+        u8 hasRefelection = std::mem::read_unsigned($, 1);
+        if ( std::ctype::isalnum( hasRefelection ) )
+        {
+            char reflectionFile[] [[color("#80AC60")]];
+            u8 flag10;
+            u8 flag11;
+            u8 flag12;
+        }
+        
+        u8 flag3;
+        u8 flag4;
+        if ( flag4 == 1 )
+            u8 flag4a;
+        u8 flag5;
+        u8 flag6;
+        u8 flag7;
+        u8 flag8;
+    }
+    u32 vertexDataCount [[color("FFFFFF")]];
+    if ( vertexDataCount > 10000 )
+        return;
+    SSM_VertexData buffer[vertexDataCount];
+    u32 faceCount [[color("FFFFFF")]];
+    if ( faceCount > 10000 )
+        return;
+    SSM_Face faces[faceCount];
+};
+
+struct SSM_Take
+{
+    char name[];
+    u32 number;
+};
+
+struct SSM_JointWeight
+{
+    s32 jointIndex;
+    float weight;
+};
+
+struct SSM_Weight
+{
+    SSM_JointWeight jointWeights[while( std::mem::read_signed($, 4) >= 0 )];
+    padding[4];
+} [[inline]];
+
+struct SSM_Model<auto PARENT>
+{
+    u8 type [[color("808080")]];
+    u16 submeshCount [[color("FFFFFF")]];
+    u8 flag1;
+    u8 flag2;
+    SSM_Submesh submeshes[ submeshCount ];
+    char name[] [[color("#80AC60")]];
+    if ( PARENT ) char parentName[] [[color("#80AC60")]];
+};
+
+struct SSM_FrameData
+{
+    Matrix3x4f transform;
+    Vector3f bbox;
+} [[static]];
+
+struct SSM_Frame<auto SIZE>
+{
+    SSM_FrameData boneData[SIZE];
+} [[static]];
+
+struct SSM_Joint
+{
+    char name[] [[color("#80AC60")]];
+    Matrix3x4f transform;
+    Vector3f bbox;
+    s32 hierarchyNextIndx [[color("A020F0")]];
+    s32 parentIndx [[color("A020F0")]];
+    s32 childIndx [[color("A020F0")]];
+};
+
+struct SSM_Animation
+{
+    u8 objectType [[color("808080")]];
+    u32 jointCount [[color("FFFFFF")]];
+    SSM_Joint joints[jointCount];
+    u32 frameCount [[color("FFFFFF")]];
+    float frameRate [[color("FFFFFF")]];
+    SSM_Frame<jointCount> frames[frameCount];
+    SSM_Weight weights[while( std::mem::read_signed($, 4) >= 0 )];
+    s32 number1 [[color("A020F0")]];
+    SSM_Take takes[while( std::ctype::isalpha(std::mem::read_unsigned($, 1)))];
+};
+
+u32 lastPointSize;
+
+struct SSM_Object
+{
+    u8 objectType [[color("808080")]];
+    if ( objectType == 8u )
+        continue;
+         
+    if ( objectType == 4u || objectType == 5u || objectType == 0u )
+    {
+        SSM_PointArray pointArray;
+        
+        u8 bufferType = std::mem::read_unsigned($, 1);
+        if (bufferType == 1u)
+        {
+            SSM_Animation animation;
+        }
+    
+        bufferType = std::mem::read_unsigned($, 1);
+        if (bufferType == 0u)
+        {
+            SSM_Model<objectType == 0u || objectType == 5u> model;
+        }
+    }
+    else if ( objectType == 1u )
+    {
+        SSM_Light light;
+    }
+    else break;
+};
+
+struct SSM
+{
+    SSM_Object objects[while( std::mem::eof() == false )];
+};
+
+SSM ssm @ 0x00;
