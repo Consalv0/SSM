@@ -30,7 +30,28 @@ class ImportSSMOperator(Operator, ImportHelper):
         options={'HIDDEN'},
     )
 
-    scale = 1/254.0 # inches
+    importBonesShapes: bpy.props.BoolProperty(
+        name="Import Bone Shapes",
+        description="Excludes meshes that are called after a bone.",
+        default=False
+    )
+
+    scale: bpy.props.FloatProperty(
+        name="Scale",
+        description="Scale factor applied to imported model.",
+        default=1/254.0,
+        min=0.0001,
+        max=1000.0
+    )
+    
+    def draw(self, context):
+        layout = self.layout
+    
+        # Create a box for transform-related settings
+        box = layout.box()
+        box.label(text="Settings")
+        box.prop(self, "importBonesShapes")
+        box.prop(self, "scale")
 
     def execute(self, context):
         filepath = self.filepath
@@ -53,12 +74,14 @@ class ImportSSMOperator(Operator, ImportHelper):
 
             cur_offset = 0
 
+            SSM_objects = []
+
             while cur_offset + 1 <= len(cur):
                 objectType = struct.unpack_from('<B', cur, cur_offset)[0]
                 cur_offset += 1
 
                 if objectType == 0x08:
-                    log(f"[OBJ] Found object type {objectType} at offset {cur_offset:08X} (SSM_Object)")
+                    log(f"[OBJ] Found object type {objectType} at offset {cur_offset:08X} (SSM_Unknown)")
                 elif objectType == 0x00 or objectType == 0x04 or objectType == 0x05:
                     log(f"[OBJ] Found object type {objectType} at offset {cur_offset:08X} (SSM_Object)")
                     positions = []
@@ -284,18 +307,19 @@ class ImportSSMOperator(Operator, ImportHelper):
                             'materials': materials,
                             'pos_vert_map': pos_vert_map
                         }
-    
-                        log(f"[Model] Name: {name}, Parent: {parent_name}")
-                                
-                        # Create Blender mesh
-                        if positions and materials:
-                            self.create_blender_mesh(filepath, model, joint_count, joints, weights, log)
-                            self.create_blender_armature(model, joint_count, joints, parent_joints, log)
-                               
-                            # Create animations if we have frame data
-                            if frames and takes and joint_count > 0:
-                                self.create_blender_animations(model, joints, parent_joints, frames, takes, frame_rate, log)
-    
+
+                        SSM_object = {
+                            'name': name,
+                            'model': model,
+                            'joint_count': joint_count,
+                            'joints': joints,
+                            'weights': weights,
+                            'parent_joints': parent_joints,
+                            'frame_rate': frame_rate,
+                            'frames': frames,
+                            'takes': takes
+                        }
+                        SSM_objects.append( SSM_object )
                 elif objectType == 0x01:
                     cur_offset += 1
                     log(f"[OBJ] Found object type 0x01 at offset {cur_offset - 2:08X} (SSM_Light)")
@@ -318,8 +342,37 @@ class ImportSSMOperator(Operator, ImportHelper):
                 else:
                     log(f"[OBJ] Unknown object type 0x{objectType:02X} at offset {cur_offset - 2:08X}, stopping.")
                     break
+                
+            
+            main_object = None
+            for object in SSM_objects:
+                if object['joint_count'] > 0:
+                    main_object = object
+                    main_object['model']['parent_name'] = 'Scene Root'
+                    break
+            
+            # Get the set of joint names for easy lookup (if main_object found)
+            joints_names = set()
+            if main_object and 'joints' in main_object:
+                joints_names = {joint['name'] for joint in main_object['joints']}
 
-            self.report({'INFO'}, f"Imported {len(materials)} materials with {len(positions)} vertices")
+            for object in SSM_objects:
+                log(f"[Model] Name: {object['name']}, Parent: {object['model']['parent_name']}")
+
+                if self.importBonesShapes == False:
+                    # If any main_object['joints'] ... ['name'] equal object['name'] skip
+                    if object['name'] in joints_names:
+                        continue
+
+                # Create Blender mesh
+                if positions and materials:
+                    self.create_blender_mesh(filepath, object['model'], object['joint_count'], object['joints'], object['weights'], log)
+                    self.create_blender_armature(object['model'], object['joint_count'], object['joints'], object['parent_joints'], log)
+                           
+                    # Create animations if we have frame data
+                    if frames and takes and joint_count > 0:
+                        self.create_blender_animations(object['model'], object['joints'], object['parent_joints'], object['frames'], object['takes'], object['frame_rate'], log)
+                    self.report({'INFO'}, f"Imported {len(object['model']['materials'])} submeshes with {len(object['model']['positions'])} positions")
 
         except Exception as e:
             self.report({'ERROR'}, f"Failed to import SSM: {e}")
@@ -485,11 +538,13 @@ class ImportSSMOperator(Operator, ImportHelper):
             current_bone.use_local_location = False
             self.bones.update( {joint_index: current_bone} )
 
-            joint_mesh = self.meshes[ joint_name ]
-            armature_modifier = joint_mesh.modifiers.new(name="Armature", type='ARMATURE')
-            armature_modifier.object = obj
-            vertex_group = joint_mesh.vertex_groups.new(name=joint_name)
-            vertex_group.add(list(range(len(joint_mesh.data.vertices))), 1, 'REPLACE')
+            if joint_name in self.meshes:
+                joint_mesh = self.meshes[ joint_name ]
+                armature_modifier = joint_mesh.modifiers.new(name="Armature", type='ARMATURE')
+                armature_modifier.object = obj
+
+                vertex_group = joint_mesh.vertex_groups.new(name=joint_name)
+                vertex_group.add(list(range(len(joint_mesh.data.vertices))), 1, 'REPLACE')
         
         for joint_index, joint in enumerate( joints ):
             parent_idx = joint['parent_idx']
