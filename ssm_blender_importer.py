@@ -345,11 +345,12 @@ class ImportSSMOperator(Operator, ImportHelper):
                 
             
             main_object = None
-            for object in SSM_objects:
-                if object['joint_count'] > 0:
-                    main_object = object
-                    main_object['model']['parent_name'] = 'Scene Root'
-                    break
+            if self.importBonesShapes == False:
+                for object in SSM_objects:
+                    if object['joint_count'] > 0:
+                        main_object = object
+                        main_object['model']['parent_name'] = 'Scene Root'
+                        break
             
             # Get the set of joint names for easy lookup (if main_object found)
             joints_names = set()
@@ -359,7 +360,7 @@ class ImportSSMOperator(Operator, ImportHelper):
             for object in SSM_objects:
                 log(f"[Model] Name: {object['name']}, Parent: {object['model']['parent_name']}")
 
-                if self.importBonesShapes == False:
+                if main_object and self.importBonesShapes == False:
                     # If any main_object['joints'] ... ['name'] equal object['name'] skip
                     if object['name'] in joints_names:
                         continue
@@ -367,10 +368,10 @@ class ImportSSMOperator(Operator, ImportHelper):
                 # Create Blender mesh
                 if positions and materials:
                     self.create_blender_mesh(filepath, object['model'], object['joint_count'], object['joints'], object['weights'], log)
-                    self.create_blender_armature(object['model'], object['joint_count'], object['joints'], object['parent_joints'], log)
+                    self.create_blender_armature(object['model'], object['joint_count'], object['joints'], log)
                            
                     # Create animations if we have frame data
-                    if frames and takes and joint_count > 0:
+                    if object['frames'] and object['takes'] and object['joint_count'] > 0:
                         self.create_blender_animations(object['model'], object['joints'], object['parent_joints'], object['frames'], object['takes'], object['frame_rate'], log)
                     self.report({'INFO'}, f"Imported {len(object['model']['materials'])} submeshes with {len(object['model']['positions'])} positions")
 
@@ -508,7 +509,7 @@ class ImportSSMOperator(Operator, ImportHelper):
     
     armatures = dict()
     bones = dict( {-1: None} )
-    def create_blender_armature(self, model, joint_count, joints, parent_joints, log):
+    def create_blender_armature(self, model, joint_count, joints, log):
         if joint_count == 0:
             return
         
