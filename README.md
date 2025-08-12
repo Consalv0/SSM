@@ -33,6 +33,8 @@ The format was reverse engineered from the original game files. Maybe I'll do a 
 The `SSM.hexpattern` file in the repository is an [ImHex](https://imhex.werwolv.net/) pattern language description of the `.SSM` format.  
 Copy the text in ImHex with an `.SSM` file loaded to see the parsed structure.
 
+<img src="images/fighter.png"/>
+
 ## License
 
 MIT License — do what you want with it, but credit is appreciated.
