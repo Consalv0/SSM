@@ -75,6 +75,9 @@ class ImportSSMOperator(Operator, ImportHelper):
             cur_offset = 0
 
             SSM_objects = []
+            meshes = dict( {'Scene Root': None} )
+            armatures = dict()
+            bones = dict( {-1: None} )
 
             while cur_offset + 1 <= len(cur):
                 objectType = struct.unpack_from('<B', cur, cur_offset)[0]
@@ -367,12 +370,12 @@ class ImportSSMOperator(Operator, ImportHelper):
 
                 # Create Blender mesh
                 if positions and materials:
-                    self.create_blender_mesh(filepath, object['model'], object['joint_count'], object['joints'], object['weights'], log)
-                    self.create_blender_armature(object['model'], object['joint_count'], object['joints'], log)
+                    self.create_blender_mesh( meshes, filepath, object['model'], object['joint_count'], object['joints'], object['weights'], log)
+                    self.create_blender_armature( meshes, bones, armatures, object['model'], object['joint_count'], object['joints'], log)
                            
                     # Create animations if we have frame data
                     if object['frames'] and object['takes'] and object['joint_count'] > 0:
-                        self.create_blender_animations(object['model'], object['joints'], object['parent_joints'], object['frames'], object['takes'], object['frame_rate'], log)
+                        self.create_blender_animations( armatures, object['model'], object['joints'], object['parent_joints'], object['frames'], object['takes'], object['frame_rate'], log)
                     self.report({'INFO'}, f"Imported {len(object['model']['materials'])} submeshes with {len(object['model']['positions'])} positions")
 
         except Exception as e:
@@ -381,8 +384,7 @@ class ImportSSMOperator(Operator, ImportHelper):
 
         return {'FINISHED'}
     
-    meshes = dict( {'Scene Root': None} )
-    def create_blender_mesh(self, filepath, model, joint_count, joints, weights, log):
+    def create_blender_mesh(self, meshes, filepath, model, joint_count, joints, weights, log):
         """Create Blender mesh with materials and UV mapping"""
         
         mesh_name = model['name']
@@ -406,7 +408,7 @@ class ImportSSMOperator(Operator, ImportHelper):
 
         bpy.context.collection.objects.link(obj)
         
-        obj.parent = self.meshes[ parent_name ]
+        obj.parent = meshes[ parent_name ]
 
         for mat_idx, material_data in enumerate(materials):
             face_material_map[mat_idx] = []
@@ -505,11 +507,9 @@ class ImportSSMOperator(Operator, ImportHelper):
                         vertex_group.add(pos_vert_map[vertex_index], weight_value, 'ADD')
         
         log(f"[MESH] Assigned bone weights")
-        self.meshes.update( { mesh_name: obj } )
+        meshes.update( { mesh_name: obj } )
     
-    armatures = dict()
-    bones = dict( {-1: None} )
-    def create_blender_armature(self, model, joint_count, joints, log):
+    def create_blender_armature(self, meshes, bones, armatures, model, joint_count, joints, log):
         if joint_count == 0:
             return
         
@@ -520,9 +520,9 @@ class ImportSSMOperator(Operator, ImportHelper):
         armature = bpy.data.armatures.new(mesh_name + "_rig")
         # Create object
         obj = bpy.data.objects.new(mesh_name + "_armature", armature)
-        obj.parent = self.meshes[ parent_name ]
+        obj.parent = meshes[ parent_name ]
 
-        armature_modifier = self.meshes[ mesh_name ].modifiers.new(name="Armature", type='ARMATURE')
+        armature_modifier = meshes[ mesh_name ].modifiers.new(name="Armature", type='ARMATURE')
         armature_modifier.object = obj
 
         bpy.context.collection.objects.link( obj )
@@ -537,10 +537,10 @@ class ImportSSMOperator(Operator, ImportHelper):
             log(f"[ARMATURE] Created bone '{joint_index}': '{joint_name}'")
 
             current_bone.use_local_location = False
-            self.bones.update( {joint_index: current_bone} )
+            bones.update( {joint_index: current_bone} )
 
-            if joint_name in self.meshes:
-                joint_mesh = self.meshes[ joint_name ]
+            if joint_name in meshes:
+                joint_mesh = meshes[ joint_name ]
                 armature_modifier = joint_mesh.modifiers.new(name="Armature", type='ARMATURE')
                 armature_modifier.object = obj
 
@@ -549,8 +549,8 @@ class ImportSSMOperator(Operator, ImportHelper):
         
         for joint_index, joint in enumerate( joints ):
             parent_idx = joint['parent_idx']
-            parent_bone = self.bones[parent_idx]
-            current_bone = self.bones[joint_index]
+            parent_bone = bones[parent_idx]
+            current_bone = bones[joint_index]
             child_indices = joint['child_indices']
 
             transform = Matrix( joint['transform'] )
@@ -564,14 +564,14 @@ class ImportSSMOperator(Operator, ImportHelper):
 
             current_bone.parent = parent_bone
             
-        self.armatures.update( {mesh_name: obj } )
+        armatures.update( {mesh_name: obj } )
         bpy.ops.object.mode_set(mode='OBJECT')
     
-    def create_blender_animations(self, model, joints, parent_joints, frames, takes, frame_rate, log):
+    def create_blender_animations(self, armatures, model, joints, parent_joints, frames, takes, frame_rate, log):
         """Create Blender animations from SSM frame data"""
         
         mesh_name = model['name']
-        armature_obj = self.armatures[mesh_name]
+        armature_obj = armatures[mesh_name]
         
         log(f"[ANIMATION] Creating animations for armature '{armature_obj.name}'")
         
