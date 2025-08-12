@@ -31,7 +31,7 @@ The format was reverse engineered from the original game files. Maybe I'll do a 
 ## ImHex pattern file
 
 The `SSM.hexpattern` file in the repository is an [ImHex](https://imhex.werwolv.net/) pattern language description of the `.SSM` format.  
-Copy the text it in ImHex with an `.SSM` file loaded to see the parsed structure.
+Copy the text in ImHex with an `.SSM` file loaded to see the parsed structure.
 
 ## License
 
